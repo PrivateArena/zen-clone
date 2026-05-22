@@ -14,6 +14,8 @@ import (
 	"strings"
 	"zen-clone/pkg/config"
 	"zen-clone/pkg/rclone"
+
+	"github.com/sqweek/dialog"
 )
 
 type Server struct {
@@ -61,12 +63,34 @@ func (s *Server) Start() error {
 	// 5. Get last captured OAuth URL endpoint
 	mux.HandleFunc("/api/oauth-url", s.handleOAuthURL)
 
-	// 6. File server for UI assets (production fallback)
+	// 6. Browse local directory
+	mux.HandleFunc("/api/browse-directory", s.handleBrowseDirectory)
+
+	// 7. File server for UI assets (production fallback)
 	s.registerUIHandler(mux)
 
 	addr := fmt.Sprintf("127.0.0.1:%d", s.port)
 	log.Printf("[Server] Server starting on %s", addr)
 	return http.ListenAndServe(addr, mux)
+}
+
+func (s *Server) handleBrowseDirectory(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	directory, err := dialog.Directory().Title("Select Mount Point").Browse()
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":   true,
+		"directory": directory,
+	})
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {

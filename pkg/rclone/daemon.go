@@ -2,12 +2,15 @@ package rclone
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -195,6 +198,50 @@ func (d *Daemon) Stop() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.stopProcess()
+}
+
+// Shutdown attempts to unmount all active VFS mounts before killing the daemon
+func (d *Daemon) Shutdown() {
+	log.Println("[Daemon] Initiating graceful shutdown...")
+
+	d.mu.Lock()
+	if !d.running {
+		d.mu.Unlock()
+		return
+	}
+	user, pass := d.rcUser, d.rcPass
+	port := d.port
+	d.mu.Unlock()
+
+	// 1. Get list of all mounts via RC
+	mountsUrl := fmt.Sprintf("http://127.0.0.1:%d/mount/listmounts", port)
+	req, _ := http.NewRequest("POST", mountsUrl, nil)
+	req.SetBasicAuth(user, pass)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+		var result struct {
+			MountPoints []struct {
+				MountPoint string `json:"MountPoint"`
+			} `json:"mountPoints"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil {
+			for _, m := range result.MountPoints {
+				log.Printf("[Daemon] Force unmounting: %s", m.MountPoint)
+				unmountUrl := fmt.Sprintf("http://127.0.0.1:%d/mount/unmount", port)
+				unmountPayload, _ := json.Marshal(map[string]string{"mountPoint": m.MountPoint})
+				uReq, _ := http.NewRequest("POST", unmountUrl, bytes.NewBuffer(unmountPayload))
+				uReq.SetBasicAuth(user, pass)
+				uReq.Header.Set("Content-Type", "application/json")
+				_, _ = client.Do(uReq)
+			}
+		}
+	}
+
+	// 2. Finally stop the process
+	_ = d.Stop()
 }
 
 func (d *Daemon) stopProcess() error {

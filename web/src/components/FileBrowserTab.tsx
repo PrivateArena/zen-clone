@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Server, RefreshCw, Folder, File, ArrowUp } from 'lucide-react'
+import { Server, RefreshCw, Folder, File, ArrowUp, FolderOpen } from 'lucide-react'
 import { FileManagerCM } from './ContextMenu/FileManager_CM'
 import type { Remote, RcloneFile } from '../types'
 
@@ -55,6 +55,18 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = ({
   const [mountLocalPath, setMountLocalPath] = useState<string>('')
   const [mounting, setMounting] = useState<boolean>(false)
   const [quickMountError, setQuickMountError] = useState<string>('')
+
+  const handleBrowseLocalDir = async () => {
+    try {
+      const res = await fetch('/api/browse-directory')
+      const data = await res.json()
+      if (data.success && data.directory) {
+        setMountLocalPath(data.directory)
+      }
+    } catch (err: any) {
+      console.error('Failed to browse directory:', err)
+    }
+  }
 
   // Navigation helpers
   const enterDirectory = (folderName: string) => {
@@ -351,15 +363,29 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = ({
 
             <div className="form-group">
               <label className="form-label">Local Mount Point</label>
-              <input 
-                type="text" 
-                className="input-field" 
-                value={mountLocalPath}
-                onChange={(e) => setMountLocalPath(e.target.value)}
-                required
-                disabled={mounting}
-                placeholder="e.g. C:\mount\drive"
-              />
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  value={mountLocalPath}
+                  onChange={(e) => setMountLocalPath(e.target.value)}
+                  required
+                  disabled={mounting}
+                  placeholder="e.g. C:\mount\drive"
+                  style={{ flex: 1 }}
+                />
+                <button 
+                  type="button" 
+                  className="btn" 
+                  onClick={handleBrowseLocalDir}
+                  disabled={mounting}
+                  style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  title="Browse Local Directory"
+                >
+                  <FolderOpen size={14} />
+                  <span>Browse</span>
+                </button>
+              </div>
             </div>
 
             {quickMountError && (

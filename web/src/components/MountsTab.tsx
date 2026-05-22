@@ -1,5 +1,5 @@
 import React from 'react'
-import { HardDrive, Plus, Trash2, AlertTriangle, Info } from 'lucide-react'
+import { HardDrive, Plus, Trash2, AlertTriangle, Info, FolderOpen } from 'lucide-react'
 import type { Remote, Mount } from '../types'
 
 interface MountsTabProps {
@@ -33,6 +33,18 @@ export const MountsTab: React.FC<MountsTabProps> = ({
   fuseSupported,
   fuseDetails
 }) => {
+  const handleBrowseLocalDir = async () => {
+    try {
+      const res = await fetch('/api/browse-directory')
+      const data = await res.json()
+      if (data.success && data.directory) {
+        setMountPoint(data.directory)
+      }
+    } catch (err: any) {
+      console.error('Failed to browse directory:', err)
+    }
+  }
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px', height: '100%' }}>
       {/* Mount Control Panel */}
@@ -77,14 +89,27 @@ export const MountsTab: React.FC<MountsTabProps> = ({
 
           <div className="form-group">
             <label className="form-label">Mount Point (Local Path)</label>
-            <input 
-              type="text" 
-              placeholder="e.g. /home/user/mnt/gdrive"
-              className="input-field"
-              value={mountPoint}
-              onChange={(e) => setMountPoint(e.target.value)}
-              required
-            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input 
+                type="text" 
+                placeholder="e.g. /home/user/mnt/gdrive"
+                className="input-field"
+                value={mountPoint}
+                onChange={(e) => setMountPoint(e.target.value)}
+                required
+                style={{ flex: 1 }}
+              />
+              <button 
+                type="button" 
+                className="btn" 
+                onClick={handleBrowseLocalDir}
+                style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                title="Browse Local Directory"
+              >
+                <FolderOpen size={14} />
+                <span>Browse</span>
+              </button>
+            </div>
           </div>
 
           <button 

@@ -41,13 +41,13 @@ func main() {
 	go func() {
 		<-sigChan
 		log.Println("[Main] Shutting down, cleaning up rclone daemon...")
-		_ = daemon.Stop()
+		daemon.Shutdown()
 		os.Exit(0)
 	}()
 
 	// 5. Run the web server (blocks)
 	if err := srv.Start(); err != nil {
 		log.Printf("[Main] Server stopped: %v", err)
-		_ = daemon.Stop()
+		daemon.Shutdown()
 	}
 }
