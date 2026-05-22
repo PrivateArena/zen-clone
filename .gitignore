@@ -1,0 +1,10 @@
+# Build and execution outputs
+/bin/
+/data/
+/zen-clone
+/zen-clone-app
+
+# IDE / OS junk
+.DS_Store
+.vscode/
+.idea/
