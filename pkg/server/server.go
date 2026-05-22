@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -192,7 +193,35 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		r.URL.Path = "/"
 	}
 
+	// Intercept mount requests to ensure the target mount directory exists
+	if r.Method == http.MethodPost && r.URL.Path == "/mount/mount" {
+		s.ensureMountPointExists(r)
+	}
+
 	s.proxy.ServeHTTP(w, r)
+}
+
+func (s *Server) ensureMountPointExists(r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return
+	}
+	// Restore body for proxy usage
+	r.Body = io.NopCloser(bytes.NewBuffer(body))
+
+	var payload struct {
+		MountPoint string `json:"mountPoint"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return
+	}
+
+	if payload.MountPoint != "" {
+		log.Printf("[Server] Auto-creating local mount point directory: %s", payload.MountPoint)
+		if err := os.MkdirAll(payload.MountPoint, 0755); err != nil {
+			log.Printf("[Server] Failed to create mount point directory: %v", err)
+		}
+	}
 }
 
 func (s *Server) registerUIHandler(mux *http.ServeMux) {
