@@ -44,6 +44,11 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = ({
     folderName: ''
   })
 
+  // Upload Refs & State
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState<boolean>(false)
+
   // Quick Mount Modal State
   const [showQuickMountModal, setShowQuickMountModal] = useState<boolean>(false)
   const [mountTargetFolder, setMountTargetFolder] = useState<string>('')
@@ -119,8 +124,70 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = ({
     }
   }
 
+  const triggerUploadPicker = (type: 'file' | 'folder') => {
+    if (type === 'file') {
+      fileInputRef.current?.click()
+    } else {
+      folderInputRef.current?.click()
+    }
+  }
+
+  const handleUploadFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = e.target.files
+    if (!selectedFiles || selectedFiles.length === 0 || !selectedRemote) return
+
+    setUploading(true)
+    const targetFolder = contextMenu.folderName
+    const relativeTarget = currentPath ? `${currentPath}/${targetFolder}` : targetFolder
+
+    try {
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i]
+        const formData = new FormData()
+        formData.append('file', file)
+        
+        // Construct the remote path including filename if it's a folder upload with structure
+        const uploadPath = file.webkitRelativePath || file.name
+        
+        const res = await fetch(`/api/rclone/operations/uploadfile?fs=${selectedRemote}:&remote=${relativeTarget}/${uploadPath}`, {
+          method: 'POST',
+          body: formData
+        })
+        
+        if (!res.ok) {
+          throw new Error(`Failed to upload ${file.name}`)
+        }
+      }
+      alert('Upload completed successfully')
+      fetchFiles(selectedRemote, currentPath)
+    } catch (err: any) {
+      alert(`Upload error: ${err.message}`)
+    } finally {
+      setUploading(false)
+      // Reset inputs
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      if (folderInputRef.current) folderInputRef.current.value = ''
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '16px' }}>
+      {/* Hidden Upload Inputs */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        style={{ display: 'none' }} 
+        onChange={handleUploadFiles} 
+        multiple 
+      />
+      <input 
+        type="file" 
+        ref={folderInputRef} 
+        style={{ display: 'none' }} 
+        onChange={handleUploadFiles} 
+        {...({ webkitdirectory: "", directory: "" } as any)} 
+      />
+
       {/* Space-Saving Horizontal Toolbar */}
       <div className="card" style={{ padding: '12px 16px', display: 'flex', gap: '16px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1, minWidth: '300px' }}>
@@ -256,6 +323,7 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = ({
         folderName={contextMenu.folderName}
         onClose={() => setContextMenu(prev => ({ ...prev, visible: false }))}
         onMount={() => openQuickMountModal(contextMenu.folderName)}
+        onUpload={triggerUploadPicker}
       />
 
       {/* Quick Mount Modal Overlay */}

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"zen-clone/pkg/config"
 	"zen-clone/pkg/rclone"
 )
 
@@ -193,35 +194,60 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		r.URL.Path = "/"
 	}
 
-	// Intercept mount requests to ensure the target mount directory exists
+	// Intercept mount requests to inject defaults and ensure target directory exists
 	if r.Method == http.MethodPost && r.URL.Path == "/mount/mount" {
-		s.ensureMountPointExists(r)
+		s.prepareMountRequest(r)
 	}
 
 	s.proxy.ServeHTTP(w, r)
 }
 
-func (s *Server) ensureMountPointExists(r *http.Request) {
+func (s *Server) prepareMountRequest(r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return
 	}
-	// Restore body for proxy usage
-	r.Body = io.NopCloser(bytes.NewBuffer(body))
 
-	var payload struct {
-		MountPoint string `json:"mountPoint"`
-	}
+	var payload map[string]interface{}
 	if err := json.Unmarshal(body, &payload); err != nil {
+		r.Body = io.NopCloser(bytes.NewBuffer(body))
 		return
 	}
 
-	if payload.MountPoint != "" {
-		log.Printf("[Server] Auto-creating local mount point directory: %s", payload.MountPoint)
-		if err := os.MkdirAll(payload.MountPoint, 0755); err != nil {
+	// 1. Ensure local mount point directory exists
+	if mountPoint, ok := payload["mountPoint"].(string); ok && mountPoint != "" {
+		log.Printf("[Server] Auto-creating local mount point directory: %s", mountPoint)
+		if err := os.MkdirAll(mountPoint, 0755); err != nil {
 			log.Printf("[Server] Failed to create mount point directory: %v", err)
 		}
 	}
+
+	// 2. Inject default vfsOpt from config if not present or partially present
+	appCfg := config.GetConfig()
+	
+	vfsOpt, ok := payload["vfsOpt"].(map[string]interface{})
+	if !ok {
+		vfsOpt = make(map[string]interface{})
+	}
+
+	// Merge defaults: config.json values are used if key is missing in request
+	for k, v := range appCfg.VFSOpt {
+		if _, exists := vfsOpt[k]; !exists {
+			vfsOpt[k] = v
+		}
+	}
+	payload["vfsOpt"] = vfsOpt
+
+	// Re-marshal the modified payload
+	newBody, err := json.Marshal(payload)
+	if err != nil {
+		r.Body = io.NopCloser(bytes.NewBuffer(body))
+		return
+	}
+
+	r.Body = io.NopCloser(bytes.NewBuffer(newBody))
+	r.ContentLength = int64(len(newBody))
+	r.Header.Set("Content-Length", fmt.Sprint(len(newBody)))
 }
 
 func (s *Server) registerUIHandler(mux *http.ServeMux) {

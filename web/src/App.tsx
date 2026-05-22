@@ -227,10 +227,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fs: `${mountRemote}:${mountPath}`,
-          mountPoint: mountPoint,
-          vfsOpt: {
-            cacheMode: 'writes' // optimizes file opening inside mounted locations
-          }
+          mountPoint: mountPoint
         })
       })
       if (!res.ok) {
@@ -256,10 +253,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fs,
-          mountPoint,
-          vfsOpt: {
-            cacheMode: 'writes'
-          }
+          mountPoint
         })
       })
       if (!res.ok) {

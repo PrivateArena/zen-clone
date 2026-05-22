@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react'
-import { HardDrive, X } from 'lucide-react'
+import { HardDrive, X, Upload } from 'lucide-react'
 
 interface FileManagerCMProps {
   x: number
@@ -8,6 +8,7 @@ interface FileManagerCMProps {
   onClose: () => void
   folderName: string
   onMount: () => void
+  onUpload: (type: 'file' | 'folder') => void
 }
 
 export const FileManagerCM: React.FC<FileManagerCMProps> = ({
@@ -16,7 +17,8 @@ export const FileManagerCM: React.FC<FileManagerCMProps> = ({
   visible,
   onClose,
   folderName,
-  onMount
+  onMount,
+  onUpload
 }) => {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -57,6 +59,54 @@ export const FileManagerCM: React.FC<FileManagerCMProps> = ({
       <div style={{ padding: '6px 16px', fontSize: '11px', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)', marginBottom: '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
         Folder: {folderName}
       </div>
+
+      <button
+        onClick={() => {
+          onUpload('file')
+          onClose()
+        }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '10px 16px',
+          background: 'none',
+          border: 'none',
+          color: 'var(--text-primary)',
+          fontSize: '13px',
+          textAlign: 'left',
+          cursor: 'pointer',
+          width: '100%',
+        }}
+        className="cm-item"
+      >
+        <Upload size={14} color="var(--accent-cyan)" />
+        <span>Upload File</span>
+      </button>
+
+      <button
+        onClick={() => {
+          onUpload('folder')
+          onClose()
+        }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '10px 16px',
+          background: 'none',
+          border: 'none',
+          color: 'var(--text-primary)',
+          fontSize: '13px',
+          textAlign: 'left',
+          cursor: 'pointer',
+          width: '100%',
+        }}
+        className="cm-item"
+      >
+        <Upload size={14} color="var(--accent-cyan)" />
+        <span>Upload Folder</span>
+      </button>
 
       <button
         onClick={() => {
