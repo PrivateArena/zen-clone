@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Server, RefreshCw, Folder, File, ArrowUp } from 'lucide-react'
+import { FileManagerCM } from './ContextMenu/FileManager_CM'
 import type { Remote, RcloneFile } from '../types'
 
 interface FileBrowserTabProps {
@@ -13,6 +14,10 @@ interface FileBrowserTabProps {
   fetchFiles: (remote: string, path: string) => Promise<void>
   pathHistory: string[]
   setPathHistory: (val: string[]) => void
+  projectRoot: string
+  fuseSupported: boolean
+  fuseDetails: string
+  onQuickMount: (fs: string, mountPoint: string) => Promise<void>
 }
 
 export const FileBrowserTab: React.FC<FileBrowserTabProps> = ({
@@ -25,8 +30,27 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = ({
   loadingFiles,
   fetchFiles,
   pathHistory,
-  setPathHistory
+  setPathHistory,
+  projectRoot,
+  fuseSupported,
+  fuseDetails,
+  onQuickMount
 }) => {
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; visible: boolean; folderName: string }>({
+    x: 0,
+    y: 0,
+    visible: false,
+    folderName: ''
+  })
+
+  // Quick Mount Modal State
+  const [showQuickMountModal, setShowQuickMountModal] = useState<boolean>(false)
+  const [mountTargetFolder, setMountTargetFolder] = useState<string>('')
+  const [mountLocalPath, setMountLocalPath] = useState<string>('')
+  const [mounting, setMounting] = useState<boolean>(false)
+  const [quickMountError, setQuickMountError] = useState<string>('')
+
   // Navigation helpers
   const enterDirectory = (folderName: string) => {
     const nextPath = currentPath ? `${currentPath}/${folderName}` : folderName
@@ -40,7 +64,6 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = ({
       setPathHistory(pathHistory.slice(0, -1))
       setCurrentPath(prevPath)
     } else if (currentPath) {
-      // Split path and drop last segment
       const segments = currentPath.split('/')
       if (segments.length <= 1) {
         setCurrentPath('')
@@ -57,6 +80,43 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = ({
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const handleContextMenu = (e: React.MouseEvent, file: RcloneFile) => {
+    if (!file.IsDir) return
+    e.preventDefault()
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      visible: true,
+      folderName: file.Name
+    })
+  }
+
+  const openQuickMountModal = (folderName: string) => {
+    setMountTargetFolder(folderName)
+    const separator = projectRoot.includes('\\') ? '\\' : '/'
+    const folderPath = currentPath 
+      ? `${currentPath.replace(/\//g, separator)}${separator}${folderName}` 
+      : folderName
+    const pathValue = `${projectRoot}${separator}mount${separator}${selectedRemote}${separator}${folderPath}`
+    setMountLocalPath(pathValue)
+    setQuickMountError('')
+    setShowQuickMountModal(true)
+  }
+
+  const executeQuickMount = async () => {
+    setMounting(true)
+    setQuickMountError('')
+    const targetFs = `${selectedRemote}:${currentPath ? currentPath + '/' : ''}${mountTargetFolder}`
+    try {
+      await onQuickMount(targetFs, mountLocalPath)
+      setShowQuickMountModal(false)
+    } catch (err: any) {
+      setQuickMountError(err.message || 'Failed to mount virtual drive')
+    } finally {
+      setMounting(false)
+    }
   }
 
   return (
@@ -156,6 +216,7 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = ({
                     key={idx} 
                     className="file-table-row"
                     onClick={() => file.IsDir && enterDirectory(file.Name)}
+                    onContextMenu={(e) => handleContextMenu(e, file)}
                     style={{ 
                       borderBottom: '1px solid rgba(255,255,255,0.03)', 
                       cursor: file.IsDir ? 'pointer' : 'default',
@@ -186,6 +247,80 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Context Menu Component */}
+      <FileManagerCM 
+        x={contextMenu.x}
+        y={contextMenu.y}
+        visible={contextMenu.visible}
+        folderName={contextMenu.folderName}
+        onClose={() => setContextMenu(prev => ({ ...prev, visible: false }))}
+        onMount={() => openQuickMountModal(contextMenu.folderName)}
+      />
+
+      {/* Quick Mount Modal Overlay */}
+      {showQuickMountModal && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 600 }}>Quick Mount Folder</h3>
+            
+            {!fuseSupported && (
+              <div style={{ backgroundColor: 'rgba(255, 74, 74, 0.1)', border: '1px solid var(--error)', color: 'var(--error)', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '12px' }}>
+                <strong>FUSE Driver Missing:</strong> {fuseDetails || 'No FUSE support detected.'} Quick mount requires installing FUSE/WinFsp.
+              </div>
+            )}
+
+            <div className="form-group">
+              <label className="form-label">Remote Folder Path</label>
+              <input 
+                type="text" 
+                readOnly 
+                className="input-field" 
+                value={`${selectedRemote}:${currentPath ? currentPath + '/' : ''}${mountTargetFolder}`}
+                style={{ opacity: 0.7, cursor: 'not-allowed' }}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Local Mount Point</label>
+              <input 
+                type="text" 
+                className="input-field" 
+                value={mountLocalPath}
+                onChange={(e) => setMountLocalPath(e.target.value)}
+                required
+                disabled={mounting}
+                placeholder="e.g. C:\mount\drive"
+              />
+            </div>
+
+            {quickMountError && (
+              <div style={{ color: 'var(--error)', fontSize: '12px', marginBottom: '12px' }}>
+                {quickMountError}
+              </div>
+            )}
+
+            <div className="modal-actions">
+              <button 
+                type="button" 
+                className="btn" 
+                onClick={() => setShowQuickMountModal(false)}
+                disabled={mounting}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                onClick={executeQuickMount}
+                disabled={mounting || !fuseSupported || !mountLocalPath}
+              >
+                {mounting ? 'Mounting...' : 'Mount'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

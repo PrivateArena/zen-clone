@@ -73,12 +73,14 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	rcloneBin, configPath, _ := rclone.GetPortablePaths()
 	_, binErr := os.Stat(rcloneBin)
+	projectRoot := rclone.GetBinaryDir()
 
 	status := map[string]interface{}{
 		"running":         s.daemon.IsRunning(),
 		"portable_bin":    rcloneBin,
 		"portable_config": configPath,
 		"bin_exists":      binErr == nil,
+		"project_root":    projectRoot,
 	}
 
 	json.NewEncoder(w).Encode(status)

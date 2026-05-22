@@ -436,3 +436,10 @@ body {
   background-color: rgba(102, 252, 241, 0.04) !important;
 }
 
+/* Context Menu options */
+.cm-item:hover {
+  background-color: rgba(102, 252, 241, 0.05) !important;
+  color: var(--accent-cyan) !important;
+}
+
+

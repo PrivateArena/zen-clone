@@ -15,6 +15,7 @@ function App() {
   const [binExists, setBinExists] = useState<boolean>(true)
   const [portableBin, setPortableBin] = useState<string>('')
   const [portableConfig, setPortableConfig] = useState<string>('')
+  const [projectRoot, setProjectRoot] = useState<string>('')
   const [downloadingRclone, setDownloadingRclone] = useState<boolean>(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false)
 
@@ -52,6 +53,7 @@ function App() {
       setBinExists(data.bin_exists)
       setPortableBin(data.portable_bin)
       setPortableConfig(data.portable_config)
+      setProjectRoot(data.project_root)
 
       const fuseRes = await fetch('/api/fuse-check')
       const fuseData = await fuseRes.json()
@@ -245,6 +247,33 @@ function App() {
     }
   }
 
+  const handleQuickMount = async (fs: string, mountPoint: string) => {
+    setErrorMsg('')
+    setSuccessMsg('')
+    try {
+      const res = await fetch('/api/rclone/mount/mount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fs,
+          mountPoint,
+          vfsOpt: {
+            cacheMode: 'writes'
+          }
+        })
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || 'Failed to mount virtual drive')
+      }
+      setSuccessMsg(`Mounted target "${fs}" successfully to "${mountPoint}"`)
+      fetchMounts()
+    } catch (e: any) {
+      setErrorMsg(e.message)
+      throw e
+    }
+  }
+
   // Handle unmounting a remote
   const handleUnmount = async (_fs: string, mountPoint: string) => {
     setErrorMsg('')
@@ -374,6 +403,10 @@ function App() {
               fetchFiles={fetchFiles}
               pathHistory={pathHistory}
               setPathHistory={setPathHistory}
+              projectRoot={projectRoot}
+              fuseSupported={fuseSupported}
+              fuseDetails={fuseDetails}
+              onQuickMount={handleQuickMount}
             />
           )}
         </div>
