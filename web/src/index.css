@@ -34,11 +34,11 @@ body {
 
 /* Premium Layout Container */
 .app-container {
-  display: grid;
-  grid-template-columns: 260px 1fr;
+  display: flex;
   height: 100vh;
   width: 100vw;
   background-color: var(--bg-primary);
+  overflow: hidden;
 }
 
 /* Sidebar Styling */
@@ -47,7 +47,13 @@ body {
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  padding: 24px;
+  padding: 24px 16px;
+  flex-shrink: 0;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1), padding 0.2s ease;
+}
+
+.sidebar.collapsed {
+  padding: 24px 0 !important;
 }
 
 .brand {
@@ -424,3 +430,9 @@ body {
   animation: spin 1s linear infinite;
   display: inline-block;
 }
+
+/* File browser table styles */
+.file-table-row:hover {
+  background-color: rgba(102, 252, 241, 0.04) !important;
+}
+
