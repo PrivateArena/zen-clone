@@ -43,3 +43,6 @@ dist-ssr
 .vscode/
 .idea/
 .zenmcp/
+research_temp/
+tmp/
+research/
