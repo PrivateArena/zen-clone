@@ -18,12 +18,20 @@ var webAssets embed.FS
 func main() {
 	log.Println("[Main] Starting zen-clone...")
 
-	// 1. Setup embedded web assets for production
-	f, err := fs.Sub(webAssets, "web/dist")
-	if err != nil {
-		log.Fatalf("failed to sub embed FS: %v", err)
+	// 1. Setup web assets
+	var uiFS http.FileSystem
+	if _, err := os.Stat("web/dist"); err == nil {
+		log.Println("[UI] Using local disk assets from web/dist")
+		uiFS = http.Dir("web/dist")
+	} else {
+		log.Println("[UI] Using embedded production assets")
+		f, err := fs.Sub(webAssets, "web/dist")
+		if err != nil {
+			log.Fatalf("failed to sub embed FS: %v", err)
+		}
+		uiFS = http.FS(f)
 	}
-	server.UIFileSystem = http.FS(f)
+	server.UIFileSystem = uiFS
 
 	// 2. Start the local Rclone daemon on port 51900
 	daemon := rclone.NewDaemon(51900)

@@ -286,6 +286,19 @@ function App() {
     }
   }
 
+  // Reset path when remote changes
+  useEffect(() => {
+    setCurrentPath('')
+    setPathHistory([])
+  }, [selectedRemote])
+
+  // Auto-fetch files when remote or path changes
+  useEffect(() => {
+    if (selectedRemote && activeTab === 'browser') {
+      fetchFiles(selectedRemote, currentPath)
+    }
+  }, [selectedRemote, currentPath, activeTab])
+
   // Run on mount
   useEffect(() => {
     checkStatus()

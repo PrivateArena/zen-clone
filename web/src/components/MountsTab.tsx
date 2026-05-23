@@ -1,6 +1,7 @@
 import React from 'react'
 import { HardDrive, Plus, Trash2, AlertTriangle, Info, FolderOpen } from 'lucide-react'
 import type { Remote, Mount } from '../types'
+import { LocalFolderPicker } from './LocalFolderPicker'
 
 interface MountsTabProps {
   mounts: Mount[]
@@ -33,20 +34,23 @@ export const MountsTab: React.FC<MountsTabProps> = ({
   fuseSupported,
   fuseDetails
 }) => {
-  const handleBrowseLocalDir = async () => {
-    try {
-      const res = await fetch('/api/browse-directory')
-      const data = await res.json()
-      if (data.success && data.directory) {
-        setMountPoint(data.directory)
-      }
-    } catch (err: any) {
-      console.error('Failed to browse directory:', err)
-    }
+  const [showLocalPicker, setShowLocalPicker] = React.useState<boolean>(false)
+
+  const onBrowseLocalDirectory = () => {
+    setShowLocalPicker(true)
+  }
+
+  const handleLocalSelect = (path: string) => {
+    setMountPoint(path)
   }
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px', height: '100%' }}>
+      <LocalFolderPicker 
+        visible={showLocalPicker}
+        onSelect={handleLocalSelect}
+        onClose={() => setShowLocalPicker(false)}
+      />
       {/* Mount Control Panel */}
       <div className="card" style={{ height: 'fit-content' }}>
         <h3 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 600 }}>Mount Virtual Drive</h3>
@@ -102,7 +106,7 @@ export const MountsTab: React.FC<MountsTabProps> = ({
               <button 
                 type="button" 
                 className="btn" 
-                onClick={handleBrowseLocalDir}
+                onClick={onBrowseLocalDirectory}
                 style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
                 title="Browse Local Directory"
               >

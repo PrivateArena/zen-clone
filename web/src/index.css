@@ -109,6 +109,8 @@ body {
   flex-direction: column;
   overflow: hidden;
   height: 100%;
+  flex: 1;
+  min-width: 0;
 }
 
 /* Header status controls */

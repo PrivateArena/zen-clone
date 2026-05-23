@@ -11,11 +11,10 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"zen-clone/pkg/config"
 	"zen-clone/pkg/rclone"
-
-	"github.com/sqweek/dialog"
 )
 
 type Server struct {
@@ -63,8 +62,8 @@ func (s *Server) Start() error {
 	// 5. Get last captured OAuth URL endpoint
 	mux.HandleFunc("/api/oauth-url", s.handleOAuthURL)
 
-	// 6. Browse local directory
-	mux.HandleFunc("/api/browse-directory", s.handleBrowseDirectory)
+	// 6. Browse local directory (Web-based)
+	mux.HandleFunc("/api/local/ls", s.handleLocalLs)
 
 	// 7. File server for UI assets (production fallback)
 	s.registerUIHandler(mux)
@@ -74,11 +73,24 @@ func (s *Server) Start() error {
 	return http.ListenAndServe(addr, mux)
 }
 
-func (s *Server) handleBrowseDirectory(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleLocalLs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	directory, err := dialog.Directory().Title("Select Mount Point").Browse()
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			path = "/"
+		} else {
+			path = home
+		}
+	}
+
+	// Clean path to prevent traversal/obvious issues, though this is a local tool
+	path = filepath.Clean(path)
+
+	entries, err := os.ReadDir(path)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
@@ -87,10 +99,35 @@ func (s *Server) handleBrowseDirectory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	type Entry struct {
+		Name  string `json:"name"`
+		IsDir bool   `json:"is_dir"`
+	}
+
+	var items []Entry
+	// Add ".." if not at root
+	parent := filepath.Dir(path)
+	if parent != path {
+		items = append(items, Entry{Name: "..", IsDir: true})
+	}
+
+	for _, entry := range entries {
+		items = append(items, Entry{
+			Name:  entry.Name(),
+			IsDir: entry.IsDir(),
+		})
+	}
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":   true,
-		"directory": directory,
+		"success": true,
+		"path":    path,
+		"dirs":    items, // Keeping the key name "dirs" for frontend compatibility, but it now contains files too
 	})
+}
+
+func (s *Server) handleBrowseDirectory(w http.ResponseWriter, r *http.Request) {
+	// Deprecated in favor of /api/local/ls web picker to avoid CGO/GTK crashes
+	w.WriteHeader(http.StatusGone)
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {

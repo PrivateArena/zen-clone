@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -71,24 +73,35 @@ func (d *Daemon) ClearOAuthURL() {
 	d.lastOAuthURL = ""
 }
 
+func (d *Daemon) authPath() string {
+	return filepath.Join(filepath.Dir(d.configPath), ".daemon_auth")
+}
+
 func (d *Daemon) Start() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	if d.running {
-		return fmt.Errorf("daemon is already running")
+		return nil
 	}
 
-	// 1. Ensure portable binary exists; if not, download it automatically
+	// 1. Try to Reconnect to an existing daemon
+	if d.tryReconnect() {
+		log.Printf("[Daemon] Successfully reconnected to existing daemon on 127.0.0.1:%d", d.port)
+		return nil
+	}
+
+	// 2. Reconnect failed, but port might be busy. Kill it if so.
+	d.killZombieOnPort()
+
+	// 3. Ensure portable binary exists
 	if _, err := os.Stat(d.rclonePath); os.IsNotExist(err) {
 		log.Printf("[Daemon] Portable rclone binary not found at %s. Attempting auto-download...", d.rclonePath)
-		// Release lock during download to avoid blocking other status requests
 		d.mu.Unlock()
 		downloadErr := DownloadAndInstallRclone(d.rclonePath)
 		d.mu.Lock()
 		if downloadErr != nil {
 			if _, pathErr := exec.LookPath("rclone"); pathErr == nil {
-				log.Println("[Daemon] Download failed; falling back to system path 'rclone'")
 				d.rclonePath = "rclone"
 			} else {
 				return fmt.Errorf("rclone binary missing and auto-download failed: %w", downloadErr)
@@ -96,22 +109,19 @@ func (d *Daemon) Start() error {
 		}
 	}
 
-	// 2. Generate strong, ephemeral credentials for the session
+	// 3. Generate credentials
 	userBuf := make([]byte, 16)
 	passBuf := make([]byte, 32)
-	if _, err := rand.Read(userBuf); err != nil {
-		return fmt.Errorf("failed to generate rc-user: %w", err)
-	}
-	if _, err := rand.Read(passBuf); err != nil {
-		return fmt.Errorf("failed to generate rc-pass: %w", err)
-	}
+	rand.Read(userBuf)
+	rand.Read(passBuf)
 	d.rcUser = hex.EncodeToString(userBuf)
 	d.rcPass = hex.EncodeToString(passBuf)
 
-	// Clear previous OAuth URL
-	d.lastOAuthURL = ""
+	// Save credentials for future reconnection
+	authData, _ := json.Marshal(map[string]string{"user": d.rcUser, "pass": d.rcPass})
+	_ = os.WriteFile(d.authPath(), authData, 0600)
 
-	// 3. Build the rclone command arguments
+	// 4. Start the process
 	addr := fmt.Sprintf("127.0.0.1:%d", d.port)
 	args := []string{
 		"rcd",
@@ -124,18 +134,9 @@ func (d *Daemon) Start() error {
 		"--cache-dir", d.cacheDir,
 	}
 
-	// 4. Start the process
 	cmd := exec.Command(d.rclonePath, args...)
-
-	// Pipe stdout and stderr to capture interactive authorization URLs
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to pipe stdout: %w", err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("failed to pipe stderr: %w", err)
-	}
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start rclone: %w", err)
@@ -145,53 +146,94 @@ func (d *Daemon) Start() error {
 	d.running = true
 	log.Printf("[Daemon] Rclone daemon started on %s", addr)
 
-	// Stream log readers
-	scanStream := func(r io.Reader, label string) {
-		scanner := bufio.NewScanner(r)
-		for scanner.Scan() {
-			line := scanner.Text()
-			// Only output logs containing config/auth info or errors to keep output neat
-			if strings.Contains(line, "auth") || strings.Contains(line, "127.0.0.1") || strings.Contains(line, "Error") || strings.Contains(line, "link") {
-				log.Printf("[%s] %s", label, line)
-			}
-			
-			// Detect authentication link
-			if strings.Contains(line, "127.0.0.1:53682/auth") || strings.Contains(line, "accounts.google.com") || strings.Contains(line, "login.microsoftonline.com") || strings.Contains(line, "http://") || strings.Contains(line, "https://") {
-				u := extractURL(line)
-				if u != "" && (strings.Contains(u, "53682") || strings.Contains(u, "auth") || strings.Contains(u, "google") || strings.Contains(u, "microsoft") || strings.Contains(u, "authorize")) {
-					d.mu.Lock()
-					d.lastOAuthURL = u
-					d.mu.Unlock()
-					log.Printf("[Daemon] Captured OAuth authorization URL: %s", u)
-				}
-			}
-		}
-	}
+	go d.scanStream(stdout, "Rclone-Out")
+	go d.scanStream(stderr, "Rclone-Err")
 
-	go scanStream(stdout, "Rclone-Out")
-	go scanStream(stderr, "Rclone-Err")
-
-	// Background goroutine to monitor process exit
 	go func() {
-		err := cmd.Wait()
+		_ = cmd.Wait()
 		d.mu.Lock()
-		d.running = false
-		d.cmd = nil
-		d.mu.Unlock()
-		if err != nil {
-			log.Printf("[Daemon] Rclone daemon exited with error: %v", err)
-		} else {
-			log.Printf("[Daemon] Rclone daemon exited cleanly")
+		if d.cmd == cmd {
+			d.running = false
+			d.cmd = nil
 		}
+		d.mu.Unlock()
 	}()
 
-	// 5. Wait for the port to open
-	if err := d.waitForPort(time.Second * 5); err != nil {
-		_ = d.stopProcess()
-		return fmt.Errorf("timeout waiting for rclone port: %w", err)
+	return d.waitForPort(time.Second * 5)
+}
+
+func (d *Daemon) tryReconnect() bool {
+	data, err := os.ReadFile(d.authPath())
+	if err != nil {
+		return false
 	}
 
-	return nil
+	var auth struct {
+		User string `json:"user"`
+		Pass string `json:"pass"`
+	}
+	if err := json.Unmarshal(data, &auth); err != nil {
+		return false
+	}
+
+	// Ping the core/version endpoint
+	url := fmt.Sprintf("http://127.0.0.1:%d/core/version", d.port)
+	req, _ := http.NewRequest("POST", url, nil)
+	req.SetBasicAuth(auth.User, auth.Pass)
+
+	client := &http.Client{Timeout: 1 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		d.rcUser = auth.User
+		d.rcPass = auth.Pass
+		d.running = true
+		return true
+	}
+
+	return false
+}
+
+func (d *Daemon) killZombieOnPort() {
+	addr := fmt.Sprintf("127.0.0.1:%d", d.port)
+	l, err := net.Listen("tcp", addr)
+	if err == nil {
+		l.Close()
+		return // Port is free
+	}
+
+	log.Printf("[Daemon] Port %d is busy and we can't reconnect. Cleaning up...", d.port)
+	
+	// Linux/Mac solution
+	_ = exec.Command("fuser", "-k", fmt.Sprintf("%d/tcp", d.port)).Run()
+	
+	// Windows fallback (if needed in future)
+	if runtime.GOOS == "windows" {
+		cmd := fmt.Sprintf("Stop-Process -Id (Get-NetTCPConnection -LocalPort %d).OwningProcess -Force", d.port)
+		_ = exec.Command("powershell", "-Command", cmd).Run()
+	}
+
+	// Wait a moment for OS to release the socket
+	time.Sleep(1 * time.Second)
+}
+
+func (d *Daemon) scanStream(r io.Reader, label string) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, "auth") || strings.Contains(line, "127.0.0.1") || strings.Contains(line, "Error") || strings.Contains(line, "link") {
+			log.Printf("[%s] %s", label, line)
+		}
+		if u := extractURL(line); u != "" && (strings.Contains(u, "auth") || strings.Contains(u, "google") || strings.Contains(u, "authorize")) {
+			d.mu.Lock()
+			d.lastOAuthURL = u
+			d.mu.Unlock()
+		}
+	}
 }
 
 func (d *Daemon) Stop() error {
