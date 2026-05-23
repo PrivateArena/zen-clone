@@ -10,7 +10,7 @@
   --error: #ff4a4a;
   --success: #2ec4b6;
   --warning: #ffb703;
-  
+
   --sans: 'Outfit', system-ui, -apple-system, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
@@ -28,7 +28,9 @@ body {
   overflow-x: hidden;
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -68,7 +70,7 @@ body {
   font-weight: 700;
   letter-spacing: 1px;
   background: linear-gradient(45deg, var(--accent-cyan), #ffffff);
-  -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -190,6 +192,10 @@ body {
 .card:hover {
   transform: translateY(-4px);
   border-color: rgba(102, 252, 241, 0.3);
+}
+
+.card.static:hover {
+  transform: none;
 }
 
 .card-header {
@@ -424,8 +430,13 @@ body {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .spin-anim {
@@ -443,5 +454,3 @@ body {
   background-color: rgba(102, 252, 241, 0.05) !important;
   color: var(--accent-cyan) !important;
 }
-
-

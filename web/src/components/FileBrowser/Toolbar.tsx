@@ -29,7 +29,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 }) => {
   return (
     <div
-      className="card"
+      className="card static"
       style={{ padding: '12px 16px', display: 'flex', gap: '16px', alignItems: 'center', justifyContent: 'flex-start' }}
       onClick={(e) => e.stopPropagation()}
     >

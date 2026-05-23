@@ -87,11 +87,11 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = (props) => {
     onBrowseLocalDirectory,
     triggerUploadPicker,
     handleLocalSelect,
-    enterDirectory,
     navigateUp,
     refreshCurrent,
     executeQuickMount,
     handleRowClick,
+    handleRowDoubleClick,
     handleContextMenu,
     handleContainerContextMenu,
     handleCopy,
@@ -144,9 +144,7 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = (props) => {
         currentPath={currentPath}
         loadingFiles={loadingFiles}
         onRowClick={handleRowClick}
-        onRowDoubleClick={(file) => {
-          if (file.IsDir) enterDirectory(file.Name)
-        }}
+        onRowDoubleClick={handleRowDoubleClick}
         onRowContextMenu={handleContextMenu}
         onContainerContextMenu={handleContainerContextMenu}
       />

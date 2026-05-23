@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import type { Remote, RcloneFile } from '../types'
 
 export interface BackgroundTask {
@@ -205,28 +205,28 @@ export const useFileBrowser = ({
   }
 
   // Navigation helpers
-  const enterDirectory = (folderName: string) => {
+  const enterDirectory = useCallback((folderName: string) => {
     const nextPath = currentPath ? `${currentPath}/${folderName}` : folderName
     setPathHistory([...pathHistory, currentPath])
     setCurrentPath(nextPath)
     setSelectedFiles([])
     setLastSelectedIndex(null)
-  }
+  }, [currentPath, pathHistory, setPathHistory, setCurrentPath, setSelectedFiles, setLastSelectedIndex])
 
-  const navigateUp = () => {
+  const navigateUp = useCallback(() => {
     const history = [...pathHistory]
     const prevPath = history.pop() || ''
     setPathHistory(history)
     setCurrentPath(prevPath)
     setSelectedFiles([])
     setLastSelectedIndex(null)
-  }
+  }, [pathHistory, setPathHistory, setCurrentPath, setSelectedFiles, setLastSelectedIndex])
 
-  const refreshCurrent = () => {
+  const refreshCurrent = useCallback(() => {
     if (selectedRemote) {
       fetchFiles(selectedRemote, currentPath)
     }
-  }
+  }, [selectedRemote, currentPath, fetchFiles])
 
   const executeQuickMount = async () => {
     setMounting(true)
@@ -242,7 +242,7 @@ export const useFileBrowser = ({
     }
   }
 
-  const handleRowClick = (e: React.MouseEvent, file: RcloneFile, index: number) => {
+  const handleRowClick = useCallback((e: React.MouseEvent, file: RcloneFile, index: number) => {
     e.stopPropagation()
 
     if (e.ctrlKey || e.metaKey) {
@@ -267,9 +267,9 @@ export const useFileBrowser = ({
       setSelectedFiles([file])
       setLastSelectedIndex(index)
     }
-  }
+  }, [lastSelectedIndex, sortedFiles, setSelectedFiles, setLastSelectedIndex])
 
-  const handleContextMenu = (e: React.MouseEvent, file: RcloneFile | null) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent, file: RcloneFile | null) => {
     e.preventDefault()
     e.stopPropagation()
 
@@ -290,9 +290,9 @@ export const useFileBrowser = ({
       y: e.clientY,
       visible: true
     })
-  }
+  }, [selectedFiles, sortedFiles, setSelectedFiles, setLastSelectedIndex, setContextMenu])
 
-  const handleContainerContextMenu = (e: React.MouseEvent) => {
+  const handleContainerContextMenu = useCallback((e: React.MouseEvent) => {
     if (e.defaultPrevented) return
     e.preventDefault()
     setSelectedFiles([])
@@ -302,7 +302,11 @@ export const useFileBrowser = ({
       y: e.clientY,
       visible: true
     })
-  }
+  }, [setSelectedFiles, setLastSelectedIndex, setContextMenu])
+
+  const handleRowDoubleClick = useCallback((file: RcloneFile) => {
+    if (file.IsDir) enterDirectory(file.Name)
+  }, [enterDirectory])
 
   // Clipboard actions
   const handleCopy = (files: RcloneFile[]) => {
@@ -645,6 +649,7 @@ export const useFileBrowser = ({
     refreshCurrent,
     executeQuickMount,
     handleRowClick,
+    handleRowDoubleClick,
     handleContextMenu,
     handleContainerContextMenu,
     handleCopy,

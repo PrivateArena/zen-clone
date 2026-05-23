@@ -1,6 +1,80 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { RefreshCw, Folder, File } from 'lucide-react'
 import type { RcloneFile } from '../../types'
+
+interface FileRowProps {
+  file: RcloneFile
+  idx: number
+  isSelected: boolean
+  isCutSource: boolean
+  onRowClick: (e: React.MouseEvent, file: RcloneFile, index: number) => void
+  onRowDoubleClick: (file: RcloneFile) => void
+  onRowContextMenu: (e: React.MouseEvent, file: RcloneFile) => void
+}
+
+const FileRow: React.FC<FileRowProps> = React.memo(({
+  file,
+  idx,
+  isSelected,
+  isCutSource,
+  onRowClick,
+  onRowDoubleClick,
+  onRowContextMenu
+}) => {
+  const formattedSize = useMemo(() => {
+    if (file.IsDir) return '-'
+    if (file.Size === 0) return '0 Bytes'
+    if (file.Size < 0) return '-'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(file.Size) / Math.log(k))
+    return parseFloat((file.Size / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }, [file.IsDir, file.Size])
+
+  const formattedDate = useMemo(() => {
+    return new Date(file.ModTime).toLocaleString()
+  }, [file.ModTime])
+
+  return (
+    <tr
+      className={`file-table-row ${isSelected ? 'selected' : ''}`}
+      onClick={(e) => onRowClick(e, file, idx)}
+      onDoubleClick={(e) => {
+        e.stopPropagation()
+        onRowDoubleClick(file)
+      }}
+      onContextMenu={(e) => onRowContextMenu(e, file)}
+      style={{
+        borderBottom: '1px solid rgba(255,255,255,0.03)',
+        cursor: 'pointer',
+        transition: 'background-color 0.15s ease',
+        backgroundColor: isSelected ? 'rgba(102, 252, 241, 0.08)' : 'transparent',
+        opacity: isCutSource ? 0.5 : 1,
+        borderLeft: isSelected ? '3px solid var(--accent-cyan)' : '3px solid transparent'
+      }}
+    >
+      <td style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {file.IsDir ? <Folder size={16} color="var(--accent-cyan)" /> : <File size={16} color="var(--text-secondary)" />}
+      </td>
+      <td style={{ padding: '14px 20px', fontWeight: file.IsDir ? 600 : 'normal', color: 'var(--text-primary)' }}>
+        <span style={{ display: 'inline-block', maxWidth: '50vw', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.Name}>
+          {file.Name}
+        </span>
+      </td>
+      <td style={{ padding: '14px 20px', color: 'var(--text-secondary)' }}>
+        {formattedSize}
+      </td>
+      <td style={{ padding: '14px 20px', color: 'var(--text-secondary)', fontSize: '12px' }}>
+        {formattedDate}
+      </td>
+      <td style={{ padding: '14px 20px', color: 'var(--text-secondary)', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {file.IsDir ? 'Folder' : file.MimeType || 'Unknown'}
+      </td>
+    </tr>
+  )
+})
+
+FileRow.displayName = 'FileRow'
 
 interface FileTableProps {
   sortedFiles: RcloneFile[]
@@ -34,7 +108,7 @@ export const FileTable: React.FC<FileTableProps> = ({
 }) => {
   return (
     <div
-      className="card"
+      className="card static"
       style={{ flex: 1, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
       onContextMenu={(e) => onContainerContextMenu(e)}
     >
@@ -72,50 +146,19 @@ export const FileTable: React.FC<FileTableProps> = ({
             ) : (
               sortedFiles.map((file, idx) => {
                 const isSelected = selectedFiles.some(f => f.Name === file.Name)
-                const isCutSource = clipboard && clipboard.op === 'cut' && clipboard.sourceRemoteName === selectedRemote && clipboard.sourcePath === currentPath && clipboard.files.some(f => f.Name === file.Name)
+                const isCutSource = !!(clipboard && clipboard.op === 'cut' && clipboard.sourceRemoteName === selectedRemote && clipboard.sourcePath === currentPath && clipboard.files.some(f => f.Name === file.Name))
 
                 return (
-                  <tr
-                    key={idx}
-                    className={`file-table-row ${isSelected ? 'selected' : ''}`}
-                    onClick={(e) => onRowClick(e, file, idx)}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation()
-                      onRowDoubleClick(file)
-                    }}
-                    onContextMenu={(e) => onRowContextMenu(e, file)}
-                    style={{
-                      borderBottom: '1px solid rgba(255,255,255,0.03)',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.15s ease',
-                      backgroundColor: isSelected ? 'rgba(102, 252, 241, 0.08)' : 'transparent',
-                      opacity: isCutSource ? 0.5 : 1,
-                      borderLeft: isSelected ? '3px solid var(--accent-cyan)' : '3px solid transparent'
-                    }}
-                  >
-                    <td style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {file.IsDir ? <Folder size={16} color="var(--accent-cyan)" /> : <File size={16} color="var(--text-secondary)" />}
-                    </td>
-                    <td style={{ padding: '14px 20px', fontWeight: file.IsDir ? 600 : 'normal', color: 'var(--text-primary)' }}>
-                      <span style={{ display: 'inline-block', maxWidth: '50vw', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.Name}>
-                        {file.Name}
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px 20px', color: 'var(--text-secondary)' }}>
-                      {file.IsDir ? '-' : (file.Size === 0 ? '0 Bytes' : (file.Size < 0 ? '-' : (() => {
-                        const k = 1024
-                        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
-                        const i = Math.floor(Math.log(file.Size) / Math.log(k))
-                        return parseFloat((file.Size / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-                      })()))}
-                    </td>
-                    <td style={{ padding: '14px 20px', color: 'var(--text-secondary)', fontSize: '12px' }}>
-                      {new Date(file.ModTime).toLocaleString()}
-                    </td>
-                    <td style={{ padding: '14px 20px', color: 'var(--text-secondary)', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {file.IsDir ? 'Folder' : file.MimeType || 'Unknown'}
-                    </td>
-                  </tr>
+                  <FileRow
+                    key={file.Name}
+                    file={file}
+                    idx={idx}
+                    isSelected={isSelected}
+                    isCutSource={isCutSource}
+                    onRowClick={onRowClick}
+                    onRowDoubleClick={onRowDoubleClick}
+                    onRowContextMenu={onRowContextMenu}
+                  />
                 )
               })
             )}
