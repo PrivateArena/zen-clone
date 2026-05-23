@@ -132,6 +132,12 @@ func (d *Daemon) Start() error {
 		"--rc-serve",
 		"--config", d.configPath,
 		"--cache-dir", d.cacheDir,
+		// Performance Optimizations (Global flags compatible with rcd)
+		"--buffer-size", "128M",
+		"--use-mmap",
+		"--fast-list",
+		"--transfers", "8",
+		"--checkers", "16",
 	}
 
 	cmd := exec.Command(d.rclonePath, args...)

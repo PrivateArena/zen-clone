@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { Server, RefreshCw, Folder, File, ArrowUp, FolderOpen } from 'lucide-react'
 import { FileManagerCM } from './ContextMenu/FileManager_CM'
 import { LocalFolderPicker } from './LocalFolderPicker'
@@ -58,6 +58,17 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = ({
   // Local Picker State
   const [showLocalPicker, setShowLocalPicker] = useState<boolean>(false)
   const [pickerMode, setPickerMode] = useState<'file' | 'folder' | 'both'>('folder')
+
+  // Memoized and sorted file list: Folders first, then files, both sorted by name
+  const sortedFiles = useMemo(() => {
+    return [...files].sort((a, b) => {
+      // 1. Folders first
+      if (a.IsDir && !b.IsDir) return -1
+      if (!a.IsDir && b.IsDir) return 1
+      // 2. Alphabetical sort (natural sort)
+      return a.Name.localeCompare(b.Name, undefined, { numeric: true, sensitivity: 'base' })
+    })
+  }, [files])
 
   const onBrowseLocalDirectory = () => {
     setPickerMode('folder')
@@ -251,14 +262,14 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = ({
                     Select a cloud remote storage account from the toolbar to browse files.
                   </td>
                 </tr>
-              ) : files.length === 0 ? (
+              ) : sortedFiles.length === 0 ? (
                 <tr>
                   <td colSpan={5} style={{ padding: '64px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
                     This folder is empty.
                   </td>
                 </tr>
               ) : (
-                files.map((file, idx) => (
+                sortedFiles.map((file, idx) => (
                   <tr
                     key={idx}
                     className="file-table-row"

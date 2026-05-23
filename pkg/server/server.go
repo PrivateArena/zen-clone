@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 	"zen-clone/pkg/config"
 	"zen-clone/pkg/rclone"
 )
@@ -26,6 +28,20 @@ type Server struct {
 func NewServer(port int, daemon *rclone.Daemon) *Server {
 	targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:51900"))
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+
+	// Optimize proxy transport for long-running rclone operations
+	proxy.Transport = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		MaxIdleConnsPerHost:   20, // Critical for high-concurrency with the daemon
+	}
 
 	// Custom Director to inject credentials on the fly
 	originalDirector := proxy.Director

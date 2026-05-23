@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Folder, X, Home, ArrowUp, File } from 'lucide-react'
 
 interface LocalFolderPickerProps {
@@ -21,6 +21,22 @@ export const LocalFolderPicker: React.FC<LocalFolderPickerProps> = ({
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string>('')
   const [selectedItem, setSelectedItem] = useState<{ name: string; isDir: boolean } | null>(null)
+
+  // Memoized and sorted item list: ".." first, then folders, then files
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => {
+      // 1. Parent directory always at the very top
+      if (a.name === '..') return -1
+      if (b.name === '..') return 1
+      
+      // 2. Folders before files
+      if (a.is_dir && !b.is_dir) return -1
+      if (!a.is_dir && b.is_dir) return 1
+      
+      // 3. Alphabetical sort (natural sort)
+      return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+    })
+  }, [items])
 
   const fetchItems = async (path: string) => {
     setLoading(true)
@@ -121,7 +137,7 @@ export const LocalFolderPicker: React.FC<LocalFolderPickerProps> = ({
             <div style={{ padding: '20px', color: 'var(--error)', textAlign: 'center' }}>{error}</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {items.map((item, idx) => {
+              {sortedItems.map((item, idx) => {
                 const isSelected = selectedItem && selectedItem.name === item.name && selectedItem.isDir === item.is_dir
                 return (
                   <div 
