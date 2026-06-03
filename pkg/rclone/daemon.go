@@ -61,6 +61,12 @@ func (d *Daemon) RclonePath() string {
 	return d.rclonePath
 }
 
+func (d *Daemon) Port() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.port
+}
+
 func (d *Daemon) LastOAuthURL() string {
 	d.mu.Lock()
 	defer d.mu.Unlock()

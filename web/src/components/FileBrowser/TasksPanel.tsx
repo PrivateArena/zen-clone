@@ -114,9 +114,18 @@ export const TasksPanel: React.FC<TasksPanelProps> = ({
 
                 {/* Progress Bar or Error */}
                 {t.status === 'running' && (
-                  <div style={{ width: '100%', height: '4px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden', marginTop: '4px' }}>
-                    <div style={{ width: `${t.progress}%`, height: '100%', backgroundColor: 'var(--accent-cyan)', transition: 'width 0.3s ease' }} />
-                  </div>
+                  <>
+                    <div style={{ width: '100%', height: '4px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden', marginTop: '4px' }}>
+                      <div style={{ width: `${t.progress}%`, height: '100%', backgroundColor: 'var(--accent-cyan)', transition: 'width 0.4s ease' }} />
+                    </div>
+                    {(t.speed || t.eta) && (
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '3px', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                        {t.speed && <span>⚡ {t.speed}</span>}
+                        {t.eta  && <span>⏱ {t.eta}</span>}
+                        {t.progress > 0 && <span style={{ marginLeft: 'auto' }}>{t.progress}%</span>}
+                      </div>
+                    )}
+                  </>
                 )}
                 {t.status === 'failed' && t.error && (
                   <div style={{ color: 'var(--error)', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>

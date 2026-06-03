@@ -7,8 +7,25 @@ export interface BackgroundTask {
   op: 'copy' | 'cut' | 'delete' | 'mkdir'
   status: 'running' | 'completed' | 'failed'
   progress: number
+  speed?: string
+  eta?: string
   error?: string
   timestamp: Date
+}
+
+// --- Formatting helpers ---
+const fmtSpeed = (bps: number): string => {
+  if (bps <= 0) return ''
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+  let v = bps, i = 0
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+  return `${v.toFixed(1)} ${units[i]}`
+}
+const fmtETA = (secs: number): string => {
+  if (secs <= 0 || !isFinite(secs)) return ''
+  if (secs < 60) return `${Math.round(secs)}s`
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s`
+  return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`
 }
 
 interface UseFileBrowserProps {
@@ -85,20 +102,41 @@ export const useFileBrowser = ({
   const [mounting, setMounting] = useState<boolean>(false)
   const [quickMountError, setQuickMountError] = useState<string>('')
 
+  // Sync Modal State
+  const [showSyncModal, setShowSyncModal] = useState<boolean>(false)
+  const [syncTargetFolder, setSyncTargetFolder] = useState<string>('')
+
   // Local Picker State
   const [showLocalPicker, setShowLocalPicker] = useState<boolean>(false)
   const [pickerMode, setPickerMode] = useState<'file' | 'folder' | 'both'>('folder')
 
-  // Memoized and sorted file list: Folders first, then files, both sorted by name
+  // Sort State
+  const [sortCol, setSortCol] = useState<'name' | 'size' | 'modified' | 'type'>('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const handleSortChange = (col: 'name' | 'size' | 'modified' | 'type') => {
+    if (sortCol === col) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortCol(col)
+      setSortDir('asc')
+    }
+  }
+
+  // Memoized and sorted file list: Folders first, then sorted by active column
   const sortedFiles = useMemo(() => {
     return [...files].sort((a, b) => {
-      // 1. Folders first
       if (a.IsDir && !b.IsDir) return -1
       if (!a.IsDir && b.IsDir) return 1
-      // 2. Alphabetical sort (natural sort)
-      return a.Name.localeCompare(b.Name, undefined, { numeric: true, sensitivity: 'base' })
+      const dir = sortDir === 'asc' ? 1 : -1
+      switch (sortCol) {
+        case 'size':     return ((a.Size || 0) - (b.Size || 0)) * dir
+        case 'modified': return (new Date(a.ModTime).getTime() - new Date(b.ModTime).getTime()) * dir
+        case 'type':     return (a.MimeType || '').localeCompare(b.MimeType || '') * dir
+        default:         return a.Name.localeCompare(b.Name, undefined, { numeric: true, sensitivity: 'base' }) * dir
+      }
     })
-  }, [files])
+  }, [files, sortCol, sortDir])
 
   const onBrowseLocalDirectory = () => {
     setPickerMode('folder')
@@ -110,50 +148,84 @@ export const useFileBrowser = ({
     setShowLocalPicker(true)
   }
 
+  // Poll a rclone job/status + core/stats for real progress
+  const pollJobProgress = (jobId: number, taskId: string) => {
+    const iv = setInterval(async () => {
+      try {
+        const [sRes, stRes] = await Promise.all([
+          fetch('/api/rclone/job/status', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jobid: jobId })
+          }),
+          fetch('/api/rclone/core/stats', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ group: `job/${jobId}` })
+          })
+        ])
+        const statusData = await sRes.json()
+        const statsData = stRes.ok ? await stRes.json() : null
+
+        if (statsData) {
+          const { bytes = 0, totalBytes = 0, speed = 0 } = statsData
+          const pct = totalBytes > 0 ? Math.min(Math.round((bytes / totalBytes) * 100), 99) : undefined
+          const speedStr = fmtSpeed(speed)
+          const eta = totalBytes > 0 && speed > 0 ? fmtETA((totalBytes - bytes) / speed) : undefined
+          setBackgroundTasks(prev => prev.map(t =>
+            t.id === taskId ? { ...t, ...(pct !== undefined ? { progress: pct } : {}), speed: speedStr || undefined, eta } : t
+          ))
+        }
+
+        if (statusData.finished) {
+          clearInterval(iv)
+          if (statusData.success !== false) {
+            setBackgroundTasks(prev => prev.map(t =>
+              t.id === taskId ? { ...t, status: 'completed', progress: 100, speed: undefined, eta: undefined } : t
+            ))
+            refreshCurrent()
+          } else {
+            setBackgroundTasks(prev => prev.map(t =>
+              t.id === taskId ? { ...t, status: 'failed', error: statusData.error || 'Job failed' } : t
+            ))
+          }
+        }
+      } catch { clearInterval(iv) }
+    }, 1000)
+  }
+
   const startBackgroundTask = async (
     name: string,
     op: 'copy' | 'cut' | 'delete' | 'mkdir',
-    taskFn: () => Promise<void>
+    taskFn: () => Promise<number | null | void>
   ) => {
     const taskId = Math.random().toString(36).substring(2, 9)
-    const newTask: BackgroundTask = {
-      id: taskId,
-      name,
-      op,
-      status: 'running',
-      progress: 15,
-      timestamp: new Date()
-    }
-    setBackgroundTasks(prev => [newTask, ...prev])
+    setBackgroundTasks(prev => [{ id: taskId, name, op, status: 'running', progress: 5, timestamp: new Date() }, ...prev])
     setShowTasksPanel(true)
 
-    const interval = setInterval(() => {
-      setBackgroundTasks(prev => prev.map(t => {
-        if (t.id === taskId && t.status === 'running') {
-          return { ...t, progress: Math.min(t.progress + 15, 90) }
-        }
-        return t
-      }))
-    }, 800)
+    // Fake pulse only until we get the first response
+    const fakeIv = setInterval(() => {
+      setBackgroundTasks(prev => prev.map(t =>
+        t.id === taskId && t.status === 'running' ? { ...t, progress: Math.min(t.progress + 5, 30) } : t
+      ))
+    }, 600)
 
     try {
-      await taskFn()
-      clearInterval(interval)
-      setBackgroundTasks(prev => prev.map(t => {
-        if (t.id === taskId) {
-          return { ...t, status: 'completed', progress: 100 }
-        }
-        return t
-      }))
-      refreshCurrent()
+      const jobId = await taskFn()
+      clearInterval(fakeIv)
+      if (jobId) {
+        // Real polling takes over
+        pollJobProgress(jobId, taskId)
+      } else {
+        // Synchronous operation: mark done immediately
+        setBackgroundTasks(prev => prev.map(t =>
+          t.id === taskId ? { ...t, status: 'completed', progress: 100 } : t
+        ))
+        refreshCurrent()
+      }
     } catch (err: any) {
-      clearInterval(interval)
-      setBackgroundTasks(prev => prev.map(t => {
-        if (t.id === taskId) {
-          return { ...t, status: 'failed', progress: 100, error: err.message || 'Unknown error' }
-        }
-        return t
-      }))
+      clearInterval(fakeIv)
+      setBackgroundTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, status: 'failed', progress: 0, error: err.message || 'Unknown error' } : t
+      ))
     }
   }
 
@@ -172,34 +244,26 @@ export const useFileBrowser = ({
 
     startBackgroundTask(taskName, 'copy', async () => {
       if (isDir) {
-        // Background Folder Sync/Copy
         const res = await fetch(`/api/rclone/sync/copy`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            srcFs: path,
-            dstFs: `${selectedRemote}:${relativeTarget}`
-          })
+          body: JSON.stringify({ srcFs: path, dstFs: `${selectedRemote}:${relativeTarget}` })
         })
         if (!res.ok) throw new Error('Failed to start folder sync job')
+        const data = await res.json()
+        return data.jobid as number | null
       } else {
-        // Background File Copy
         const separator = path.includes('\\') ? '\\' : '/'
         const parts = path.split(separator)
         const fileName = parts.pop() || ''
         const parentPath = parts.join(separator) || (separator === '/' ? '/' : parts[0])
-
         const res = await fetch(`/api/rclone/operations/copyfile`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            srcFs: parentPath,
-            srcRemote: fileName,
-            dstFs: `${selectedRemote}:${relativeTarget}`,
-            dstRemote: fileName
-          })
+          body: JSON.stringify({ srcFs: parentPath, srcRemote: fileName, dstFs: `${selectedRemote}:${relativeTarget}`, dstRemote: fileName })
         })
         if (!res.ok) throw new Error('Failed to start file copy job')
+        return null
       }
     })
   }
@@ -360,40 +424,35 @@ export const useFileBrowser = ({
     setShowPasteConfirm(false)
 
     startBackgroundTask(taskName, opType, async () => {
+      let firstDirJobId: number | null = null
       const promises = filesToPaste.map(async (file) => {
         let res: Response
         if (file.IsDir) {
           const srcFs = `${sourceRemoteName}:${sourcePath ? sourcePath + '/' : ''}${file.Name}`
           const dstFs = `${selectedRemote}:${currentPath ? currentPath + '/' : ''}${file.Name}`
-
           res = await fetch(opType === 'cut' ? '/api/rclone/sync/move' : '/api/rclone/sync/copy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ srcFs, dstFs })
           })
+          if (!res.ok) throw new Error((await res.text()) || `Failed to paste "${file.Name}"`)
+          if (!firstDirJobId) {
+            const d = await res.clone().json()
+            firstDirJobId = d.jobid || null
+          }
         } else {
-          const srcFs = `${sourceRemoteName}:${sourcePath}`
-          const srcRemote = file.Name
-          const dstFs = `${selectedRemote}:${currentPath}`
-          const dstRemote = file.Name
-
           res = await fetch(opType === 'cut' ? '/api/rclone/operations/movefile' : '/api/rclone/operations/copyfile', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ srcFs, srcRemote, dstFs, dstRemote })
+            body: JSON.stringify({ srcFs: `${sourceRemoteName}:${sourcePath}`, srcRemote: file.Name, dstFs: `${selectedRemote}:${currentPath}`, dstRemote: file.Name })
           })
-        }
-
-        if (!res.ok) {
-          const text = await res.text()
-          throw new Error(text || `Failed to paste "${file.Name}"`)
+          if (!res.ok) throw new Error((await res.text()) || `Failed to paste "${file.Name}"`)
         }
       })
 
       await Promise.all(promises)
-      if (opType === 'cut') {
-        setClipboard(null)
-      }
+      if (opType === 'cut') setClipboard(null)
+      return firstDirJobId
     })
   }
 
@@ -524,6 +583,48 @@ export const useFileBrowser = ({
     setShowQuickMountModal(true)
   }
 
+  // rc-serve file URL: proxied through /api/rclone/{remote}/{path}
+  const getFileServingURL = (file: RcloneFile): string => {
+    const filePath = currentPath ? `${currentPath}/${file.Name}` : file.Name
+    return `/api/rclone/${selectedRemote}/${filePath}`
+  }
+
+  const handleOpen = () => {
+    if (selectedFiles.length !== 1 || selectedFiles[0].IsDir) return
+    window.open(getFileServingURL(selectedFiles[0]), '_blank')
+  }
+
+  const handleDownload = () => {
+    if (selectedFiles.length !== 1 || selectedFiles[0].IsDir) return
+    const url = getFileServingURL(selectedFiles[0])
+    const a = document.createElement('a')
+    a.href = url
+    a.download = selectedFiles[0].Name
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
+  const openSyncModal = (folderName: string) => {
+    setSyncTargetFolder(folderName)
+    setShowSyncModal(true)
+  }
+
+  const executeSync = async (srcFs: string, dstFs: string) => {
+    setShowSyncModal(false)
+    const taskName = `Sync ${srcFs} → ${dstFs}`
+    startBackgroundTask(taskName, 'copy', async () => {
+      const res = await fetch('/api/rclone/sync/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ srcFs, dstFs })
+      })
+      if (!res.ok) throw new Error((await res.text()) || 'Sync failed')
+      const data = await res.json()
+      return data.jobid as number | null
+    })
+  }
+
   // Keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -640,6 +741,9 @@ export const useFileBrowser = ({
     pickerMode,
     setPickerMode,
     sortedFiles,
+    sortCol,
+    sortDir,
+    handleSortChange,
 
     // Methods
     onBrowseLocalDirectory,
@@ -661,6 +765,13 @@ export const useFileBrowser = ({
     executeRename,
     executeDelete,
     executeNewFolder,
-    openQuickMountModal
+    openQuickMountModal,
+    handleOpen,
+    handleDownload,
+    showSyncModal,
+    setShowSyncModal,
+    syncTargetFolder,
+    openSyncModal,
+    executeSync
   }
 }

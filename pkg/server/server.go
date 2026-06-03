@@ -25,6 +25,17 @@ type Server struct {
 	proxy  *httputil.ReverseProxy
 }
 
+type SavedMount struct {
+	Fs         string                 `json:"fs"`
+	MountPoint string                 `json:"mountPoint"`
+	VfsOpt     map[string]interface{} `json:"vfsOpt,omitempty"`
+}
+
+func getMountsFilePath() string {
+	_, configPath, _ := rclone.GetPortablePaths()
+	return filepath.Join(filepath.Dir(configPath), "mounts.json")
+}
+
 func NewServer(port int, daemon *rclone.Daemon) *Server {
 	targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:51900"))
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
@@ -81,8 +92,14 @@ func (s *Server) Start() error {
 	// 6. Browse local directory (Web-based)
 	mux.HandleFunc("/api/local/ls", s.handleLocalLs)
 
-	// 7. File server for UI assets (production fallback)
+	// 7. Mount persistence
+	mux.HandleFunc("/api/mounts/save", s.handleSaveMounts)
+	mux.HandleFunc("/api/mounts/load", s.handleLoadMounts)
+
+	// 8. File server for UI assets (production fallback)
 	s.registerUIHandler(mux)
+
+	go s.autoRestoreMounts()
 
 	addr := fmt.Sprintf("127.0.0.1:%d", s.port)
 	log.Printf("[Server] Server starting on %s", addr)
@@ -144,6 +161,81 @@ func (s *Server) handleLocalLs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleBrowseDirectory(w http.ResponseWriter, r *http.Request) {
 	// Deprecated in favor of /api/local/ls web picker to avoid CGO/GTK crashes
 	w.WriteHeader(http.StatusGone)
+}
+
+func (s *Server) handleSaveMounts(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "*")
+	if r.Method == http.MethodOptions { w.WriteHeader(http.StatusOK); return }
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil { http.Error(w, "bad request", http.StatusBadRequest); return }
+
+	if err := os.WriteFile(getMountsFilePath(), body, 0600); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+}
+
+func (s *Server) handleLoadMounts(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	data, err := os.ReadFile(getMountsFilePath())
+	if err != nil {
+		json.NewEncoder(w).Encode([]SavedMount{})
+		return
+	}
+	w.Write(data)
+}
+
+func (s *Server) autoRestoreMounts() {
+	// Wait for daemon to fully start
+	time.Sleep(3 * time.Second)
+	if !s.daemon.IsRunning() { return }
+
+	data, err := os.ReadFile(getMountsFilePath())
+	if err != nil { return }
+
+	var mounts []SavedMount
+	if err := json.Unmarshal(data, &mounts); err != nil || len(mounts) == 0 { return }
+
+	user, pass := s.daemon.Credentials()
+	client := &http.Client{Timeout: 10 * time.Second}
+	appCfg := config.GetConfig()
+
+	for _, m := range mounts {
+		if err := os.MkdirAll(m.MountPoint, 0755); err != nil {
+			log.Printf("[Server] AutoMount: mkdir failed %s: %v", m.MountPoint, err)
+			continue
+		}
+
+		vfsOpt := m.VfsOpt
+		if vfsOpt == nil { vfsOpt = make(map[string]interface{}) }
+		for k, v := range appCfg.VFSOpt {
+			if _, ok := vfsOpt[k]; !ok { vfsOpt[k] = v }
+		}
+
+		payload, _ := json.Marshal(map[string]interface{}{
+			"fs": m.Fs, "mountPoint": m.MountPoint, "vfsOpt": vfsOpt,
+		})
+
+		url := fmt.Sprintf("http://127.0.0.1:%d/mount/mount", s.daemon.Port())
+		req, _ := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+		req.SetBasicAuth(user, pass)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[Server] AutoMount failed %s -> %s: %v", m.Fs, m.MountPoint, err)
+			continue
+		}
+		resp.Body.Close()
+		log.Printf("[Server] AutoMount: restored %s -> %s", m.Fs, m.MountPoint)
+	}
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {

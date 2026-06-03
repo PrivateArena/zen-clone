@@ -314,6 +314,16 @@ function App() {
     }
   }, [daemonRunning])
 
+  // T6: Persist active mounts to disk for auto-restore on next startup
+  useEffect(() => {
+    if (!daemonRunning || mounts.length === 0) return
+    fetch('/api/mounts/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mounts.map(m => ({ fs: m.fs, mountPoint: m.mountPoint })))
+    }).catch(() => { /* non-critical */ })
+  }, [mounts])
+
   return (
     <div className="app-container">
       {/* Expanded or Collapsed Sidebar */}

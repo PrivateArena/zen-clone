@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react'
-import { HardDrive, X, Upload, Copy, Scissors, Clipboard, Trash2, Edit, FolderPlus } from 'lucide-react'
+import { HardDrive, X, Upload, Copy, Scissors, Clipboard, Trash2, Edit, FolderPlus, ExternalLink, Download, RefreshCw } from 'lucide-react'
 import type { RcloneFile } from '../../types'
 
 interface FileManagerCMProps {
@@ -17,6 +17,9 @@ interface FileManagerCMProps {
   onNewFolder: () => void
   onMount: () => void
   onUpload: (type: 'file' | 'folder') => void
+  onOpen: () => void
+  onDownload: () => void
+  onSync: () => void
 }
 
 export const FileManagerCM: React.FC<FileManagerCMProps> = ({
@@ -33,7 +36,10 @@ export const FileManagerCM: React.FC<FileManagerCMProps> = ({
   onDelete,
   onNewFolder,
   onMount,
-  onUpload
+  onUpload,
+  onOpen,
+  onDownload,
+  onSync
 }) => {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -229,16 +235,54 @@ export const FileManagerCM: React.FC<FileManagerCMProps> = ({
       )}
 
       {isSingleSelection && isFolder && (
-        <button
-          onClick={() => { onMount(); onClose(); }}
-          style={buttonStyle()}
-          className="cm-item"
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <HardDrive size={13} color="var(--accent-cyan)" />
-            <span>Mount Folder</span>
-          </span>
-        </button>
+        <>
+          <button
+            onClick={() => { onMount(); onClose(); }}
+            style={buttonStyle()}
+            className="cm-item"
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <HardDrive size={13} color="var(--accent-cyan)" />
+              <span>Mount Folder</span>
+            </span>
+          </button>
+          <button
+            onClick={() => { onSync(); onClose(); }}
+            style={buttonStyle()}
+            className="cm-item"
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <RefreshCw size={13} color="var(--accent-cyan)" />
+              <span>Sync to…</span>
+            </span>
+          </button>
+        </>
+      )}
+
+      {isSingleSelection && !isFolder && (
+        <>
+          <div style={dividerStyle} />
+          <button
+            onClick={() => { onOpen(); onClose(); }}
+            style={buttonStyle()}
+            className="cm-item"
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ExternalLink size={13} color="var(--accent-cyan)" />
+              <span>Open in New Tab</span>
+            </span>
+          </button>
+          <button
+            onClick={() => { onDownload(); onClose(); }}
+            style={buttonStyle()}
+            className="cm-item"
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Download size={13} color="var(--accent-cyan)" />
+              <span>Download</span>
+            </span>
+          </button>
+        </>
       )}
 
       <div style={dividerStyle} />

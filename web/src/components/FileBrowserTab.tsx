@@ -12,6 +12,7 @@ import { RenameModal } from './FileBrowser/Modals/RenameModal'
 import { NewFolderModal } from './FileBrowser/Modals/NewFolderModal'
 import { PasteConfirmModal } from './FileBrowser/Modals/PasteConfirmModal'
 import { QuickMountModal } from './FileBrowser/Modals/QuickMountModal'
+import { SyncModal } from './FileBrowser/Modals/SyncModal'
 import type { Remote, RcloneFile } from '../types'
 
 interface FileBrowserTabProps {
@@ -82,6 +83,9 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = (props) => {
     setShowLocalPicker,
     pickerMode,
     sortedFiles,
+    sortCol,
+    sortDir,
+    handleSortChange,
 
     // Methods
     onBrowseLocalDirectory,
@@ -101,7 +105,14 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = (props) => {
     executeRename,
     executeDelete,
     executeNewFolder,
-    openQuickMountModal
+    openQuickMountModal,
+    handleOpen,
+    handleDownload,
+    showSyncModal,
+    setShowSyncModal,
+    syncTargetFolder,
+    openSyncModal,
+    executeSync
   } = useFileBrowser(props)
 
   return (
@@ -143,6 +154,9 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = (props) => {
         selectedRemote={selectedRemote}
         currentPath={currentPath}
         loadingFiles={loadingFiles}
+        sortCol={sortCol}
+        sortDir={sortDir}
+        onSortChange={handleSortChange}
         onRowClick={handleRowClick}
         onRowDoubleClick={handleRowDoubleClick}
         onRowContextMenu={handleContextMenu}
@@ -178,6 +192,9 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = (props) => {
         }}
         onMount={() => selectedFiles.length === 1 && openQuickMountModal(selectedFiles[0].Name)}
         onUpload={triggerUploadPicker}
+        onOpen={handleOpen}
+        onDownload={handleDownload}
+        onSync={() => selectedFiles.length === 1 && selectedFiles[0].IsDir && openSyncModal(selectedFiles[0].Name)}
       />
 
       {/* Delete Confirmation Modal */}
@@ -250,6 +267,18 @@ export const FileBrowserTab: React.FC<FileBrowserTabProps> = (props) => {
             <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Please do not close the browser.</div>
           </div>
         </div>
+      )}
+
+      {/* Sync Modal */}
+      {showSyncModal && (
+        <SyncModal
+          remotes={remotes}
+          selectedRemote={selectedRemote}
+          currentPath={currentPath}
+          selectedFolder={syncTargetFolder}
+          onCancel={() => setShowSyncModal(false)}
+          onConfirm={executeSync}
+        />
       )}
 
       {/* Background Tasks Floating Panel & badge */}

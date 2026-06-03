@@ -89,6 +89,9 @@ interface FileTableProps {
   selectedRemote: string
   currentPath: string
   loadingFiles: boolean
+  sortCol: 'name' | 'size' | 'modified' | 'type'
+  sortDir: 'asc' | 'desc'
+  onSortChange: (col: 'name' | 'size' | 'modified' | 'type') => void
   onRowClick: (e: React.MouseEvent, file: RcloneFile, index: number) => void
   onRowDoubleClick: (file: RcloneFile) => void
   onRowContextMenu: (e: React.MouseEvent, file: RcloneFile) => void
@@ -102,11 +105,18 @@ export const FileTable: React.FC<FileTableProps> = ({
   selectedRemote,
   currentPath,
   loadingFiles,
+  sortCol,
+  sortDir,
+  onSortChange,
   onRowClick,
   onRowDoubleClick,
   onRowContextMenu,
   onContainerContextMenu
 }) => {
+  const SortIcon = ({ col }: { col: 'name' | 'size' | 'modified' | 'type' }) => {
+    if (sortCol !== col) return <span style={{ opacity: 0.25, fontSize: '10px' }}> ⇅</span>
+    return <span style={{ color: 'var(--accent-cyan)', fontSize: '10px' }}>{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>
+  }
   return (
     <div
       className="card static"
@@ -118,10 +128,10 @@ export const FileTable: React.FC<FileTableProps> = ({
           <thead>
             <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
               <th style={{ padding: '14px 20px', width: '40px' }}></th>
-              <th style={{ padding: '14px 20px' }}>Name</th>
-              <th style={{ padding: '14px 20px', width: '100px' }}>Size</th>
-              <th style={{ padding: '14px 20px', width: '200px' }}>Modified</th>
-              <th style={{ padding: '14px 20px', width: '120px' }}>Type</th>
+              <th style={{ padding: '14px 20px', cursor: 'pointer', userSelect: 'none' }} onClick={() => onSortChange('name')}>Name<SortIcon col="name" /></th>
+              <th style={{ padding: '14px 20px', width: '100px', cursor: 'pointer', userSelect: 'none' }} onClick={() => onSortChange('size')}>Size<SortIcon col="size" /></th>
+              <th style={{ padding: '14px 20px', width: '200px', cursor: 'pointer', userSelect: 'none' }} onClick={() => onSortChange('modified')}>Modified<SortIcon col="modified" /></th>
+              <th style={{ padding: '14px 20px', width: '120px', cursor: 'pointer', userSelect: 'none' }} onClick={() => onSortChange('type')}>Type<SortIcon col="type" /></th>
             </tr>
           </thead>
           <tbody>
