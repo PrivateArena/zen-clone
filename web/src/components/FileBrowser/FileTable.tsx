@@ -50,7 +50,8 @@ const FileRow: React.FC<FileRowProps> = React.memo(({
         transition: 'background-color 0.15s ease',
         backgroundColor: isSelected ? 'rgba(102, 252, 241, 0.08)' : 'transparent',
         opacity: isCutSource ? 0.5 : 1,
-        borderLeft: isSelected ? '3px solid var(--accent-cyan)' : '3px solid transparent'
+        borderLeft: isSelected ? '3px solid var(--accent-cyan)' : '3px solid transparent',
+        userSelect: 'none'
       }}
     >
       <td style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

@@ -246,6 +246,7 @@ export const useFileBrowser = ({
     e.stopPropagation()
 
     if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
       // Toggle selection
       setSelectedFiles(prev => {
         const exists = prev.some(f => f.Name === file.Name)
@@ -257,6 +258,7 @@ export const useFileBrowser = ({
       })
       setLastSelectedIndex(index)
     } else if (e.shiftKey && lastSelectedIndex !== null) {
+      e.preventDefault()
       // Select range
       const start = Math.min(lastSelectedIndex, index)
       const end = Math.max(lastSelectedIndex, index)
