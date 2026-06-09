@@ -6,7 +6,9 @@ interface SidebarProps {
   setActiveTab: (tab: 'remotes' | 'mounts' | 'browser') => void
   portableBin: string
   portableConfig: string
-  collapsed: boolean
+  visible: boolean
+  onMouseEnter: () => void
+  onMouseLeave: () => void
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -14,40 +16,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   portableBin,
   portableConfig,
-  collapsed
+  visible,
+  onMouseEnter,
+  onMouseLeave
 }) => {
-  if (collapsed) {
-    return (
-      <aside className="sidebar collapsed" style={{ width: '60px', transition: 'width 0.2s ease', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0', borderRight: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', alignItems: 'center', width: '100%' }}>
-          <div 
-            style={{ cursor: 'pointer', padding: '8px', borderRadius: '8px', color: activeTab === 'remotes' ? 'var(--accent-cyan)' : 'var(--text-secondary)', backgroundColor: activeTab === 'remotes' ? 'rgba(102, 252, 241, 0.05)' : 'transparent' }}
-            onClick={() => setActiveTab('remotes')}
-            title="Storage Accounts"
-          >
-            <Server size={20} />
-          </div>
-          <div 
-            style={{ cursor: 'pointer', padding: '8px', borderRadius: '8px', color: activeTab === 'mounts' ? 'var(--accent-cyan)' : 'var(--text-secondary)', backgroundColor: activeTab === 'mounts' ? 'rgba(102, 252, 241, 0.05)' : 'transparent' }}
-            onClick={() => setActiveTab('mounts')}
-            title="Active Mounts"
-          >
-            <HardDrive size={20} />
-          </div>
-          <div 
-            style={{ cursor: 'pointer', padding: '8px', borderRadius: '8px', color: activeTab === 'browser' ? 'var(--accent-cyan)' : 'var(--text-secondary)', backgroundColor: activeTab === 'browser' ? 'rgba(102, 252, 241, 0.05)' : 'transparent' }}
-            onClick={() => setActiveTab('browser')}
-            title="File Browser"
-          >
-            <FolderOpen size={20} />
-          </div>
-        </div>
-      </aside>
-    )
-  }
-
   return (
-    <aside className="sidebar" style={{ width: '240px', transition: 'width 0.2s ease', display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', padding: '24px 16px' }}>
+    <aside 
+      className={`sidebar ${visible ? 'visible' : ''}`} 
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', padding: '24px 16px' }}
+    >
       <div className="brand" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '32px', paddingLeft: '8px' }}>
         <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--accent-cyan)' }} />
         <span style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '1px', color: 'var(--text-primary)' }}>ZEN-CLONE</span>

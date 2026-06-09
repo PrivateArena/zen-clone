@@ -17,7 +17,8 @@ function App() {
   const [portableConfig, setPortableConfig] = useState<string>('')
   const [projectRoot, setProjectRoot] = useState<string>('')
   const [downloadingRclone, setDownloadingRclone] = useState<boolean>(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false)
+  const [sidebarHovered, setSidebarHovered] = useState<boolean>(false)
+  const [sidebarLocked, setSidebarLocked] = useState<boolean>(false)
 
   // Remotes State
   const [remotes, setRemotes] = useState<Remote[]>([])
@@ -326,28 +327,44 @@ function App() {
 
   return (
     <div className="app-container">
+      {/* Invisible hover trigger zone for autohide sidebar */}
+      {!sidebarLocked && (
+        <div 
+          className="sidebar-trigger"
+          onMouseEnter={() => setSidebarHovered(true)}
+        />
+      )}
+
       {/* Expanded or Collapsed Sidebar */}
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         portableBin={portableBin}
         portableConfig={portableConfig}
-        collapsed={sidebarCollapsed}
+        visible={sidebarHovered || sidebarLocked}
+        onMouseEnter={() => setSidebarHovered(true)}
+        onMouseLeave={() => setSidebarHovered(false)}
       />
 
       {/* Main Workspace */}
-      <main className="workspace">
+      <main 
+        className="workspace"
+        style={{ 
+          marginLeft: sidebarLocked ? '240px' : '0', 
+          transition: 'margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1)' 
+        }}
+      >
         <Header 
           activeTab={activeTab}
           daemonRunning={daemonRunning}
           fuseSupported={fuseSupported}
           checkStatus={checkStatus}
-          sidebarCollapsed={sidebarCollapsed}
-          setSidebarCollapsed={setSidebarCollapsed}
+          sidebarLocked={sidebarLocked}
+          setSidebarLocked={setSidebarLocked}
         />
 
         {/* Dynamic content view */}
-        <div className="content-view">
+        <div className={`content-view ${activeTab === 'browser' ? 'browser-active' : ''}`}>
           {/* Portable Rclone auto-install notification */}
           {!binExists && (
             <div style={{ backgroundColor: 'rgba(255, 183, 3, 0.1)', border: '1px solid var(--warning)', color: 'var(--warning)', padding: '16px', borderRadius: '12px', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>

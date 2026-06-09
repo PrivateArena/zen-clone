@@ -14,8 +14,8 @@ interface HeaderProps {
   daemonRunning: boolean
   fuseSupported: boolean
   checkStatus: () => Promise<void>
-  sidebarCollapsed: boolean
-  setSidebarCollapsed: (val: boolean) => void
+  sidebarLocked: boolean
+  setSidebarLocked: (val: boolean) => void
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -23,8 +23,8 @@ export const Header: React.FC<HeaderProps> = ({
   daemonRunning,
   fuseSupported,
   checkStatus,
-  sidebarCollapsed,
-  setSidebarCollapsed
+  sidebarLocked,
+  setSidebarLocked
 }) => {
   const [showBwPanel, setShowBwPanel] = useState(false)
   const [activeLimit, setActiveLimit] = useState('off')
@@ -73,9 +73,17 @@ export const Header: React.FC<HeaderProps> = ({
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
         <button
           className="btn"
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          style={{ padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+          onClick={() => setSidebarLocked(!sidebarLocked)}
+          style={{ 
+            padding: '8px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            borderColor: sidebarLocked ? 'var(--accent-cyan)' : 'var(--border-color)',
+            backgroundColor: sidebarLocked ? 'rgba(102, 252, 241, 0.08)' : 'var(--bg-secondary)',
+            color: sidebarLocked ? 'var(--accent-cyan)' : 'var(--text-primary)'
+          }}
+          title={sidebarLocked ? 'Unlock Sidebar (Autohide)' : 'Lock Sidebar (Stay open)'}
         >
           <Menu size={18} />
         </button>
