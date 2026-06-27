@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Header } from './components/Header'
 import { Sidebar } from './components/Sidebar'
 import { RemotesTab } from './components/RemotesTab'
@@ -45,6 +45,8 @@ function App() {
   const [errorMsg, setErrorMsg] = useState<string>('')
   const [successMsg, setSuccessMsg] = useState<string>('')
 
+  const fuseCheckedRef = useRef(false)
+
   // Fetch status of Go backend + rclone daemon on load
   const checkStatus = async () => {
     try {
@@ -56,10 +58,15 @@ function App() {
       setPortableConfig(data.portable_config)
       setProjectRoot(data.project_root)
 
-      const fuseRes = await fetch('/api/fuse-check')
-      const fuseData = await fuseRes.json()
-      setFuseSupported(fuseData.supported)
-      setFuseDetails(fuseData.details)
+      if (!fuseCheckedRef.current) {
+        fuseCheckedRef.current = true
+        try {
+          const fuseRes = await fetch('/api/fuse-check')
+          const fuseData = await fuseRes.json()
+          setFuseSupported(fuseData.supported)
+          setFuseDetails(fuseData.details)
+        } catch { /* non-critical */ }
+      }
     } catch (e) {
       setDaemonRunning(false)
       setErrorMsg('Cannot connect to Go backend server. Make sure it is running.')
@@ -303,7 +310,7 @@ function App() {
   // Run on mount
   useEffect(() => {
     checkStatus()
-    const timer = setInterval(checkStatus, 5000)
+    const timer = setInterval(checkStatus, 15000)
     return () => clearInterval(timer)
   }, [])
 

@@ -469,6 +469,17 @@ body {
   display: inline-block;
 }
 
+@keyframes indeterminate {
+  0% { background-position: 0% 0; }
+  100% { background-position: 40px 0; }
+}
+
+.indeterminate-bar {
+  background: linear-gradient(90deg, var(--accent-cyan) 0%, rgba(102,252,241,0.3) 50%, var(--accent-cyan) 100%);
+  background-size: 40px 100%;
+  animation: indeterminate 1.5s linear infinite;
+}
+
 /* File browser table styles */
 .file-table-row:hover {
   background-color: rgba(102, 252, 241, 0.04) !important;

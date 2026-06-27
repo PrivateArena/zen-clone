@@ -11,6 +11,7 @@ export interface BackgroundTask {
   eta?: string
   error?: string
   timestamp: Date
+  indeterminate?: boolean
 }
 
 // --- Formatting helpers ---
@@ -195,16 +196,27 @@ export const useFileBrowser = ({
   const startBackgroundTask = async (
     name: string,
     op: 'copy' | 'cut' | 'delete' | 'mkdir',
-    taskFn: () => Promise<number | null | void>
+    taskFn: () => Promise<number | null | void>,
+    options?: { indeterminate?: boolean }
   ) => {
     const taskId = Math.random().toString(36).substring(2, 9)
-    setBackgroundTasks(prev => [{ id: taskId, name, op, status: 'running', progress: 5, timestamp: new Date() }, ...prev])
+    const isIndeterminate = options?.indeterminate ?? false
+    setBackgroundTasks(prev => [{
+      id: taskId,
+      name,
+      op,
+      status: 'running',
+      progress: isIndeterminate ? 0 : 5,
+      indeterminate: isIndeterminate || undefined,
+      timestamp: new Date()
+    }, ...prev])
     setShowTasksPanel(true)
 
-    // Fake pulse only until we get the first response
     const fakeIv = setInterval(() => {
       setBackgroundTasks(prev => prev.map(t =>
-        t.id === taskId && t.status === 'running' ? { ...t, progress: Math.min(t.progress + 5, 30) } : t
+        t.id === taskId && t.status === 'running' && !t.indeterminate
+          ? { ...t, progress: Math.min(t.progress + 5, 30) }
+          : t
       ))
     }, 600)
 
@@ -212,19 +224,17 @@ export const useFileBrowser = ({
       const jobId = await taskFn()
       clearInterval(fakeIv)
       if (jobId) {
-        // Real polling takes over
         pollJobProgress(jobId, taskId)
       } else {
-        // Synchronous operation: mark done immediately
         setBackgroundTasks(prev => prev.map(t =>
-          t.id === taskId ? { ...t, status: 'completed', progress: 100 } : t
+          t.id === taskId ? { ...t, status: 'completed', progress: 100, indeterminate: false } : t
         ))
         refreshCurrent()
       }
     } catch (err: any) {
       clearInterval(fakeIv)
       setBackgroundTasks(prev => prev.map(t =>
-        t.id === taskId ? { ...t, status: 'failed', progress: 0, error: err.message || 'Unknown error' } : t
+        t.id === taskId ? { ...t, status: 'failed', progress: 0, error: err.message || 'Unknown error', indeterminate: false } : t
       ))
     }
   }
@@ -265,7 +275,7 @@ export const useFileBrowser = ({
         if (!res.ok) throw new Error('Failed to start file copy job')
         return null
       }
-    })
+    }, { indeterminate: !isDir })
   }
 
   // Navigation helpers
@@ -453,7 +463,7 @@ export const useFileBrowser = ({
       await Promise.all(promises)
       if (opType === 'cut') setClipboard(null)
       return firstDirJobId
-    })
+    }, { indeterminate: filesToPaste.every(f => !f.IsDir) })
   }
 
   const executeRename = async (newName: string) => {
@@ -543,7 +553,7 @@ export const useFileBrowser = ({
       })
 
       await Promise.all(promises)
-    })
+    }, { indeterminate: true })
   }
 
   const executeNewFolder = async (folderName: string) => {

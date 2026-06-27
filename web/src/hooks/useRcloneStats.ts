@@ -39,7 +39,7 @@ export const useRcloneStats = (active: boolean): RcloneStats | null => {
     }
 
     poll()
-    timerRef.current = setInterval(poll, 2000)
+    timerRef.current = setInterval(poll, 5000)
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }

@@ -116,9 +116,13 @@ export const TasksPanel: React.FC<TasksPanelProps> = ({
                 {t.status === 'running' && (
                   <>
                     <div style={{ width: '100%', height: '4px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden', marginTop: '4px' }}>
-                      <div style={{ width: `${t.progress}%`, height: '100%', backgroundColor: 'var(--accent-cyan)', transition: 'width 0.4s ease' }} />
+                      {t.indeterminate ? (
+                        <div className="indeterminate-bar" style={{ width: '100%', height: '100%' }} />
+                      ) : (
+                        <div style={{ width: `${t.progress}%`, height: '100%', backgroundColor: 'var(--accent-cyan)', transition: 'width 0.4s ease' }} />
+                      )}
                     </div>
-                    {(t.speed || t.eta) && (
+                    {!t.indeterminate && (t.speed || t.eta) && (
                       <div style={{ display: 'flex', gap: '8px', marginTop: '3px', fontSize: '10px', color: 'var(--text-secondary)' }}>
                         {t.speed && <span>⚡ {t.speed}</span>}
                         {t.eta  && <span>⏱ {t.eta}</span>}
