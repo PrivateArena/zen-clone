@@ -1,0 +1,7 @@
+scripts/
+tmp/
+*_test.go
+node_modules/
+.zenmcp/
+ eslint.config.js
+ vite.config.ts
