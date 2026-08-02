@@ -168,10 +168,16 @@ func (s *Server) handleSaveMounts(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "*")
-	if r.Method == http.MethodOptions { w.WriteHeader(http.StatusOK); return }
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 
 	body, err := io.ReadAll(r.Body)
-	if err != nil { http.Error(w, "bad request", http.StatusBadRequest); return }
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
 
 	if err := os.WriteFile(getMountsFilePath(), body, 0600); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -195,13 +201,19 @@ func (s *Server) handleLoadMounts(w http.ResponseWriter, r *http.Request) {
 func (s *Server) autoRestoreMounts() {
 	// Wait for daemon to fully start
 	time.Sleep(3 * time.Second)
-	if !s.daemon.IsRunning() { return }
+	if !s.daemon.IsRunning() {
+		return
+	}
 
 	data, err := os.ReadFile(getMountsFilePath())
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	var mounts []SavedMount
-	if err := json.Unmarshal(data, &mounts); err != nil || len(mounts) == 0 { return }
+	if err := json.Unmarshal(data, &mounts); err != nil || len(mounts) == 0 {
+		return
+	}
 
 	user, pass := s.daemon.Credentials()
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -214,9 +226,13 @@ func (s *Server) autoRestoreMounts() {
 		}
 
 		vfsOpt := m.VfsOpt
-		if vfsOpt == nil { vfsOpt = make(map[string]interface{}) }
+		if vfsOpt == nil {
+			vfsOpt = make(map[string]interface{})
+		}
 		for k, v := range appCfg.VFSOpt {
-			if _, ok := vfsOpt[k]; !ok { vfsOpt[k] = v }
+			if _, ok := vfsOpt[k]; !ok {
+				vfsOpt[k] = v
+			}
 		}
 
 		payload, _ := json.Marshal(map[string]interface{}{
@@ -393,7 +409,7 @@ func (s *Server) prepareMountRequest(r *http.Request) {
 
 	// 2. Inject default vfsOpt from config if not present or partially present
 	appCfg := config.GetConfig()
-	
+
 	vfsOpt, ok := payload["vfsOpt"].(map[string]interface{})
 	if !ok {
 		vfsOpt = make(map[string]interface{})

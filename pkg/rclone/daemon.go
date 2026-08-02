@@ -219,10 +219,10 @@ func (d *Daemon) killZombieOnPort() {
 	}
 
 	log.Printf("[Daemon] Port %d is busy and we can't reconnect. Cleaning up...", d.port)
-	
+
 	// Linux/Mac solution
 	_ = exec.Command("fuser", "-k", fmt.Sprintf("%d/tcp", d.port)).Run()
-	
+
 	// Windows fallback (if needed in future)
 	if runtime.GOOS == "windows" {
 		cmd := fmt.Sprintf("Stop-Process -Id (Get-NetTCPConnection -LocalPort %d).OwningProcess -Force", d.port)
